@@ -122,11 +122,11 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
                 var pipelineName = _esHelper.Options.PipelineNameDecider?.Invoke(e) ?? _esHelper.Options.PipelineName;
                 if (string.IsNullOrWhiteSpace(pipelineName))
                 {
-                    action = new { index = new { _index = indexName, _type = _esHelper.Options.TypeName } };
+                    action = new { index = new { _index = indexName } };
                 }
                 else
                 {
-                    action = new { index = new { _index = indexName, _type = _esHelper.Options.TypeName, pipeline = pipelineName } };
+                    action = new { index = new { _index = indexName , pipeline = pipelineName } };
                 }
                 var actionJson = _esHelper.Serialize(action);
                 payload.Add(actionJson);
