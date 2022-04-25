@@ -4,6 +4,9 @@ using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 
+using Elastic.Apm;
+using Elastic.Apm.Api;
+
 using Geex.Common.Abstractions;
 using Geex.Common.Logging;
 
@@ -14,21 +17,24 @@ using HotChocolate.Execution.Processing;
 using HotChocolate.Language;
 using HotChocolate.Resolvers;
 using HotChocolate.Types;
+using HotChocolate.Utilities;
 
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Geex.Common.Gql
 {
-    internal class GeexApolloTracingDiagnosticEventListener : ExecutionDiagnosticEventListener
+    internal partial class GeexTracingDiagnosticEventListener : ExecutionDiagnosticEventListener
     {
         private const string _extensionKey = "tracing";
-        private readonly ILogger<GeexApolloTracingDiagnosticEventListener> logger;
+        private readonly ILogger<GeexTracingDiagnosticEventListener> logger;
         private TracingPreference _tracingPreference;
+        private bool _apmEnabled;
         private readonly ITimestampProvider _timestampProvider;
 
-        public GeexApolloTracingDiagnosticEventListener(
-          ILogger<GeexApolloTracingDiagnosticEventListener> logger,
+        public GeexTracingDiagnosticEventListener(
+          ILogger<GeexTracingDiagnosticEventListener> logger,
           LoggingModuleOptions options,
           ITimestampProvider? timestampProvider)
         {
@@ -42,47 +48,44 @@ namespace Geex.Common.Gql
         /// <inheritdoc />
         public override IDisposable ExecuteOperation(IRequestContext context)
         {
+            this._apmEnabled = Agent.IsConfigured;
             if (!this.IsEnabled(context.ContextData))
                 return EmptyScope;
             DateTime startTime = this._timestampProvider.UtcNow();
-            logger.LogInformationWithData(new EventId((nameof(GeexApolloTracingRequestScope) + "Start").GetHashCode(), nameof(GeexApolloTracingRequestScope) + "Start"), "Request started.", new { QueryId = context.Request.QueryId, Query = (context.Request.OperationName?.Contains("introspection") == true ? "[Schema Query]" : context.Request.Query?.ToString()), OperationName = context.Request.OperationName, Variables = context.Request.VariableValues?.ToDictionary(x => x.Key, x => (x.Value as IValueNode)?.Value) });
-            GeexApolloTracingResultBuilder builder = CreateBuilder(context.ContextData, logger);
-            builder.SetRequestStartTime(startTime, this._timestampProvider.NowInNanoseconds());
-            return new GeexApolloTracingRequestScope(context, logger, startTime, builder, this._timestampProvider);
+            this.logger.LogInformationWithData(new EventId((nameof(GeexTracingOperationScope) + "Start").GetHashCode(), nameof(GeexTracingOperationScope) + "Start"), "Request started.", new { QueryId = context.Request.QueryId, Query = context.GetOperationDetails(), OperationName = context.Request.OperationName, Variables = context.Request.VariableValues?.ToDictionary<KeyValuePair<string, object>, string, object>(x => x.Key, x => (x.Value as IValueNode)?.Value) });
+            GeexTracingResultBuilder builder = CreateBuilder(context, logger);
+            return new GeexTracingOperationScope(context, logger, startTime, builder, this._timestampProvider);
         }
 
         public override IDisposable ParseDocument(IRequestContext context)
         {
-            GeexApolloTracingResultBuilder builder;
-            return !TryGetBuilder(context.ContextData, out builder) ? EmptyScope : new ParseDocumentScope(builder, this._timestampProvider);
+            return new ParseDocumentScope(context, this._timestampProvider);
         }
 
         public override IDisposable ValidateDocument(IRequestContext context)
         {
-            GeexApolloTracingResultBuilder builder;
-            return !TryGetBuilder(context.ContextData, out builder) ? EmptyScope : new ValidateDocumentScope(builder, this._timestampProvider);
+            return new ValidateDocumentScope(context, this._timestampProvider);
         }
 
         public override IDisposable ResolveFieldValue(IMiddlewareContext context)
         {
-            GeexApolloTracingResultBuilder builder;
-            return !TryGetBuilder(context.ContextData, out builder) ? EmptyScope : new ResolveFieldValueScope(context, builder, this._timestampProvider);
+            return new ResolveFieldValueScope(context, this._timestampProvider);
         }
 
-        private static GeexApolloTracingResultBuilder CreateBuilder(IDictionary<string, object?> contextData,
-            ILogger<GeexApolloTracingDiagnosticEventListener> logger)
+        private static GeexTracingResultBuilder CreateBuilder(IRequestContext context,
+            ILogger<GeexTracingDiagnosticEventListener> logger)
         {
-            GeexApolloTracingResultBuilder tracingResultBuilder = new GeexApolloTracingResultBuilder(logger);
-            contextData["ApolloTracingResultBuilder"] = tracingResultBuilder;
+            GeexTracingResultBuilder tracingResultBuilder = new GeexTracingResultBuilder(logger);
+            context.ContextData["ApolloTracingResultBuilder"] = tracingResultBuilder;
             return tracingResultBuilder;
         }
 
         private static bool TryGetBuilder(
           IDictionary<string, object?> contextData,
-          [NotNullWhen(true)] out GeexApolloTracingResultBuilder? builder)
+          [NotNullWhen(true)] out GeexTracingResultBuilder? builder)
         {
             object obj;
-            if (contextData.TryGetValue("ApolloTracingResultBuilder", out obj) && obj is GeexApolloTracingResultBuilder tracingResultBuilder)
+            if (contextData.TryGetValue("ApolloTracingResultBuilder", out obj) && obj is GeexTracingResultBuilder tracingResultBuilder)
             {
                 builder = tracingResultBuilder;
                 return true;
@@ -98,93 +101,64 @@ namespace Geex.Common.Gql
             return this._tracingPreference == TracingPreference.OnDemand && contextData.ContainsKey("HotChocolate.Execution.EnableTracing");
         }
 
-        private class GeexApolloTracingRequestScope : IDisposable
-        {
-            private readonly IRequestContext _context;
-            private readonly ILogger<GeexApolloTracingDiagnosticEventListener> _logger;
-            private readonly DateTime _startTime;
-            private readonly GeexApolloTracingResultBuilder _builder;
-            private readonly ITimestampProvider _timestampProvider;
-            private bool _disposed;
-
-            public GeexApolloTracingRequestScope(IRequestContext context,
-                ILogger<GeexApolloTracingDiagnosticEventListener> logger,
-                DateTime startTime,
-                GeexApolloTracingResultBuilder builder,
-                ITimestampProvider timestampProvider)
-            {
-                this._context = context;
-                this._logger = logger;
-                this._startTime = startTime;
-                this._builder = builder;
-                this._timestampProvider = timestampProvider;
-            }
-
-            public void Dispose()
-            {
-                if (this._disposed)
-                    return;
-                this._builder.SetRequestDuration(this._timestampProvider.UtcNow() - this._startTime);
-
-                if (this._context.Result is IReadOnlyQueryResult result)
-                {
-                    var resultMap = this._builder.Build();
-                    this._logger.LogTraceWithData(GeexboxEventId.ApolloTracing, null, resultMap);
-                    // 此处需要跳过introspection查询结果
-                    _logger.LogInformationWithData(new EventId((nameof(GeexApolloTracingRequestScope) + "End").GetHashCode(), nameof(GeexApolloTracingRequestScope) + "End"), "Request ended.", new { Label = result.Label, QueryId = this._context.Request.QueryId, Data = (object)(_context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!, Error = this._context.Result.Errors });
-                    this._context.Result = QueryResultBuilder.FromResult(result).AddExtension("tracing", resultMap).Create();
-                }
-
-                this._disposed = true;
-            }
-        }
-
         private class ParseDocumentScope : IDisposable
         {
-            private readonly GeexApolloTracingResultBuilder _builder;
+            private readonly GeexTracingResultBuilder? _builder;
             private readonly ITimestampProvider _timestampProvider;
             private readonly long _startTimestamp;
             private bool _disposed;
+            private ISpan? _span;
 
             public ParseDocumentScope(
-              GeexApolloTracingResultBuilder builder,
+              IRequestContext context,
               ITimestampProvider timestampProvider)
             {
-                this._builder = builder;
+                this._builder = context.GetTypedContextData<GeexTracingResultBuilder>("ApolloTracingResultBuilder");
                 this._timestampProvider = timestampProvider;
                 this._startTimestamp = timestampProvider.NowInNanoseconds();
+                if (Agent.IsConfigured)
+                {
+                    this._span = context.GetTypedContextData<ISpan>("ApmOperationSpan")?.StartSpan("parse_document", "request", "parse_document");
+                }
             }
 
             public void Dispose()
             {
                 if (this._disposed)
                     return;
-                this._builder.SetParsingResult(this._startTimestamp, this._timestampProvider.NowInNanoseconds());
+                this._builder?.SetParsingResult(this._startTimestamp, this._timestampProvider.NowInNanoseconds());
+                this._span?.End();
                 this._disposed = true;
             }
         }
 
         private class ValidateDocumentScope : IDisposable
         {
-            private readonly GeexApolloTracingResultBuilder _builder;
+            private readonly GeexTracingResultBuilder? _builder;
             private readonly ITimestampProvider _timestampProvider;
             private readonly long _startTimestamp;
             private bool _disposed;
+            private ISpan? _span;
 
             public ValidateDocumentScope(
-              GeexApolloTracingResultBuilder builder,
+              IRequestContext context,
               ITimestampProvider timestampProvider)
             {
-                this._builder = builder;
+                this._builder = context.GetTypedContextData<GeexTracingResultBuilder>("ApolloTracingResultBuilder");
                 this._timestampProvider = timestampProvider;
                 this._startTimestamp = timestampProvider.NowInNanoseconds();
+                if (Agent.IsConfigured)
+                {
+                    this._span = context.GetTypedContextData<ISpan>("ApmOperationSpan")?.StartSpan("validate_document", "request", "validate_document");
+                }
             }
 
             public void Dispose()
             {
                 if (this._disposed)
                     return;
-                this._builder.SetValidationResult(this._startTimestamp, this._timestampProvider.NowInNanoseconds());
+                this._builder?.SetValidationResult(this._startTimestamp, this._timestampProvider.NowInNanoseconds());
+                this._span?.End();
                 this._disposed = true;
             }
         }
@@ -192,54 +166,71 @@ namespace Geex.Common.Gql
         private class ResolveFieldValueScope : IDisposable
         {
             private readonly IMiddlewareContext _context;
-            private readonly GeexApolloTracingResultBuilder _builder;
+            private readonly GeexTracingResultBuilder? _builder;
             private readonly ITimestampProvider _timestampProvider;
             private readonly long _startTimestamp;
             private bool _disposed;
+            private ISpan? _span;
+            private ISpan? _parentSpan;
 
             public ResolveFieldValueScope(
               IMiddlewareContext context,
-              GeexApolloTracingResultBuilder builder,
               ITimestampProvider timestampProvider)
             {
                 this._context = context;
-                this._builder = builder;
+                this._builder = context.GetTypedContextData<GeexTracingResultBuilder>("ApolloTracingResultBuilder");
+
                 this._timestampProvider = timestampProvider;
                 this._startTimestamp = timestampProvider.NowInNanoseconds();
+                if (Agent.IsConfigured)
+                {
+                    var pathStr = context.Path.Print();
+                    var parentPath = context.Path.Parent;
+                    while (parentPath != null && !context.ContextData.ContainsKey(parentPath?.Print() ?? ""))
+                    {
+                        parentPath = parentPath?.Parent;
+                    }
+                    var parentPathStr = parentPath?.Print();
+                    this._parentSpan = context.GetTypedContextData<ISpan>(parentPathStr ?? "ApmOperationSpan");
+                    this._span = this._parentSpan?.StartSpan(pathStr, "request", "field_resolve");
+                    context.ContextData.Add(pathStr, this._span);
+                }
             }
 
             public void Dispose()
             {
                 if (this._disposed)
                     return;
-                this._builder.AddResolverResult(new GeexApolloTracingResolverRecord(this._context, this._startTimestamp, this._timestampProvider.NowInNanoseconds()));
+                this._builder?.AddResolverResult(new GeexTracingResolverRecord(this._context, this._startTimestamp, this._timestampProvider.NowInNanoseconds()));
+                this._span?.End();
                 this._disposed = true;
             }
         }
     }
 
-    internal class GeexApolloTracingResultBuilder
+    internal class GeexTracingResultBuilder
     {
-        private readonly ILogger<GeexApolloTracingDiagnosticEventListener> logger;
+        private readonly ILogger<GeexTracingDiagnosticEventListener> logger;
         private const int _apolloTracingVersion = 1;
         private const long _ticksToNanosecondsMultiplicator = 100;
-        private readonly ConcurrentQueue<GeexApolloTracingResolverRecord> _resolverRecords = new ConcurrentQueue<GeexApolloTracingResolverRecord>();
+        private readonly ConcurrentQueue<GeexTracingResolverRecord> _resolverRecords = new ConcurrentQueue<GeexTracingResolverRecord>();
         private TimeSpan _duration;
         private ResultMap? _parsingResult;
         private DateTimeOffset _startTime;
         private long _startTimestamp;
         private ResultMap? _validationResult;
+        private ISpan? _request_span;
 
-        public GeexApolloTracingResultBuilder(ILogger<GeexApolloTracingDiagnosticEventListener> logger)
+        public GeexTracingResultBuilder(ILogger<GeexTracingDiagnosticEventListener> logger)
         {
             this.logger = logger;
         }
 
-        public void SetRequestStartTime(DateTimeOffset startTime, long startTimestamp)
+        public void SetOperationStartTime(DateTimeOffset startTime, long startTimestamp)
         {
             this._startTime = startTime;
             this._startTimestamp = startTimestamp;
-            logger.LogTrace(GeexboxEventId.ApolloTracing, "request started.");
+            logger.LogTrace(GeexboxEventId.ApolloTracing, "operation started.");
         }
 
         public void SetParsingResult(long startTimestamp, long endTimestamp)
@@ -258,9 +249,20 @@ namespace Geex.Common.Gql
             this._validationResult.SetValue(1, "duration", endTimestamp - startTimestamp);
         }
 
-        public void AddResolverResult(GeexApolloTracingResolverRecord record) => this._resolverRecords.Enqueue(record);
+        public void AddResolverResult(GeexTracingResolverRecord record) => this._resolverRecords.Enqueue(record);
 
-        public void SetRequestDuration(TimeSpan duration) => this._duration = duration;
+        public void SetOperationEndTime(IRequestContext context, TimeSpan duration)
+        {
+            this._duration = duration;
+            if (context.Result is IReadOnlyQueryResult result)
+            {
+                var resultMap = this.Build();
+                this.logger.LogTraceWithData(GeexboxEventId.ApolloTracing, null, resultMap);
+                // 此处需要跳过introspection查询结果
+                this.logger.LogInformationWithData(new EventId((nameof(GeexTracingDiagnosticEventListener.GeexTracingOperationScope) + "End").GetHashCode(), nameof(GeexTracingDiagnosticEventListener.GeexTracingOperationScope) + "End"), "Request ended.", new { QueryId = context.Request.QueryId, Data = (object)(context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!, Error = context.Result.Errors });
+                context.Result = QueryResultBuilder.FromResult(result).AddExtension("tracing", resultMap).Create();
+            }
+        }
 
         public IResultMap Build()
         {
@@ -287,7 +289,7 @@ namespace Geex.Common.Gql
         {
             int num = 0;
             ResultMap[] resultMapArray = new ResultMap[this._resolverRecords.Count];
-            foreach (GeexApolloTracingResolverRecord resolverRecord in this._resolverRecords)
+            foreach (GeexTracingResolverRecord resolverRecord in this._resolverRecords)
             {
                 ResultMap resultMap = new ResultMap();
                 resultMap.EnsureCapacity(6);
@@ -303,9 +305,9 @@ namespace Geex.Common.Gql
         }
     }
 
-    internal class GeexApolloTracingResolverRecord
+    internal class GeexTracingResolverRecord
     {
-        public GeexApolloTracingResolverRecord(
+        public GeexTracingResolverRecord(
           IResolverContext context,
           long startTimestamp,
           long endTimestamp)

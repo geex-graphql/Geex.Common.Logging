@@ -114,7 +114,7 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
         public string DeadLetterIndexName { get; set; }
 
         /// <summary>
-        /// Name the Pipeline where log are sent to es. 
+        /// Name the Pipeline where log are sent to es.
         /// </summary>
         public string PipelineName { get; set; }
 
@@ -137,6 +137,10 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
         /// Allows you to override the elasticsearch url used to communicate with elasticsearch.
         /// </summary>
         public string ElasticsearchUrl { get; set; }
+        /// <summary>
+        /// FingerPrint for cert
+        /// </summary>
+        public string CertFingerprint { get; set; }
 
         ///<summary>
         /// Allows you to override the connection used to communicate with elasticsearch.
@@ -159,7 +163,7 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
         public IElasticsearchSerializer Serializer { get; set; }
 
         /// <summary>
-        /// A callback which can be used to handle logmessage which are not submitted to Elasticsearch like when it is unable to accept the events. 
+        /// A callback which can be used to handle logmessage which are not submitted to Elasticsearch like when it is unable to accept the events.
         /// </summary>
         public Action<LogMessage> FailureCallback { get; set; }
     }

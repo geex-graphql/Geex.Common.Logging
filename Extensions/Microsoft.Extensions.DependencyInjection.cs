@@ -34,13 +34,13 @@ namespace Microsoft.Extensions.DependencyInjection
             return builder;
         }
 
-        public static IRequestExecutorBuilder AddGeexApolloTracing(
+        public static IRequestExecutorBuilder AddGeexTracing(
       this IRequestExecutorBuilder builder)
         {
             if (builder == null)
                 throw new ArgumentNullException(nameof(builder));
             builder.Services.TryAddTransient<ITimestampProvider, DefaultTimestampProvider>();
-            return builder.ConfigureSchemaServices((Action<IServiceCollection>)(s => s.AddSingleton<IExecutionDiagnosticEventListener, GeexApolloTracingDiagnosticEventListener>(provider => new GeexApolloTracingDiagnosticEventListener(provider.GetApplicationService<ILogger<GeexApolloTracingDiagnosticEventListener>>(), provider.GetApplicationService<LoggingModuleOptions>(), provider.GetApplicationService<ITimestampProvider>()))));
+            return builder.ConfigureSchemaServices((s => s.AddSingleton<IExecutionDiagnosticEventListener, GeexTracingDiagnosticEventListener>(provider => new GeexTracingDiagnosticEventListener(provider.GetApplicationService<ILogger<GeexTracingDiagnosticEventListener>>(), provider.GetApplicationService<LoggingModuleOptions>(), provider.GetApplicationService<ITimestampProvider>()))));
         }
     }
 }

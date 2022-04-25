@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.RegularExpressions;
 
 using Elasticsearch.Net;
@@ -131,7 +132,7 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
         private PostData GetTempatePostData()
         {
             //PostData no longer exposes an implict cast from object.  Previously it supported that and would inspect the object Type to
-            //determine if it it was a litteral string to write directly or if it was an object that it needed to serialse.  Now the onus is 
+            //determine if it it was a litteral string to write directly or if it was an object that it needed to serialse.  Now the onus is
             //on us to tell it what type we are passing otherwise if the user specified the template as a json string it would be serialised again.
             var template = GetTemplateData();
             if (template is string)
