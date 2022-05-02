@@ -37,8 +37,8 @@ namespace Geex.Common.Logging
         public override Task OnPreApplicationInitializationAsync(ApplicationInitializationContext context)
         {
             var app = context.GetApplicationBuilder();
-            var elasticApmConfig = Configuration.GetSection("LoggingModuleOptions:ElasticApm");
-            if (elasticApmConfig.Exists())
+            var elasticApmConfig = Configuration.GetSection("LoggingModuleOptions");
+            if (elasticApmConfig.GetSection("ElasticApm").Exists())
             {
                 app.UseElasticApm(elasticApmConfig);
             }
