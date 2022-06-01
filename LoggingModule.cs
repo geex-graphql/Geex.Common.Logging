@@ -24,6 +24,7 @@ using Volo.Abp.Modularity;
 
 namespace Geex.Common.Logging
 {
+    [DependsOn(typeof(GeexCoreModule))]
     public class LoggingModule : GeexModule<LoggingModule>
     {
         public override void ConfigureServices(ServiceConfigurationContext context)
