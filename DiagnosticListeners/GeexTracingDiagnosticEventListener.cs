@@ -259,7 +259,7 @@ namespace Geex.Common.Gql
                 var resultMap = this.Build();
                 this.logger.LogTraceWithData(GeexboxEventId.ApolloTracing, null, resultMap);
                 // 此处需要跳过introspection查询结果
-                this.logger.LogInformationWithData(new EventId((nameof(GeexTracingOperationScope) + "End").GetHashCode(), nameof(GeexTracingOperationScope) + "End"), "Request ended.", new { QueryId = context.Request.QueryId, /*Data = (object)(context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!,*/ Error = context.Result.Errors });
+                this.logger.LogDebugWithData(new EventId((nameof(GeexTracingOperationScope) + "End").GetHashCode(), nameof(GeexTracingOperationScope) + "End"), "Request ended.", new { QueryId = context.Request.QueryId, Data = (object)(context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!, Error = context.Result.Errors });
                 context.Result = QueryResultBuilder.FromResult(result).AddExtension("tracing", resultMap).Create();
             }
         }
