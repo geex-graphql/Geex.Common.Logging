@@ -50,6 +50,10 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
 
             var configuration = new ConnectionConfiguration(options.ConnectionPool, options.Connection, options.Serializer)
                 .RequestTimeout(options.ConnectionTimeout);
+            if (!options.Username.IsNullOrEmpty())
+            {
+                configuration.BasicAuthentication(options.Username, options.Password);
+            }
             if (options.ModifyConnectionSettings != null)
                 configuration = options.ModifyConnectionSettings(configuration);
 

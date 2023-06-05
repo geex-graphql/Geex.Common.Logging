@@ -47,15 +47,24 @@ namespace Geex.Common.Logging
         public string ServerCert { get; }
         public Uri ServerUrl { get; }
         public IReadOnlyList<Uri> ServerUrls { get; }
+
+        /// <inheritdoc />
+        public bool UseWindowsCredentials { get; }
         public string ServiceName { get; }
         public string ServiceNodeName { get; }
         public string ServiceVersion { get; }
         public bool SpanCompressionEnabled { get; }
         public double SpanCompressionExactMatchMaxDuration { get; }
         public double SpanCompressionSameKindMaxDuration { get; }
+
+        /// <inheritdoc />
+        public double SpanStackTraceMinDurationInMilliseconds { get; }
         public double SpanFramesMinDurationInMilliseconds { get; }
         public int StackTraceLimit { get; }
         public bool TraceContextIgnoreSampledFalse { get; }
+
+        /// <inheritdoc />
+        public string TraceContinuationStrategy { get; }
         public IReadOnlyList<WildcardMatcher> TransactionIgnoreUrls { get; }
         public int TransactionMaxSpans { get; }
         public double TransactionSampleRate { get; }

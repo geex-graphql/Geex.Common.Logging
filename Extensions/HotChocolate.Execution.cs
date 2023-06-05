@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -50,6 +51,20 @@ namespace HotChocolate.Execution
                 return result;
             }
             return default;
+        }
+
+        private static MethodInfo EnsureCapacityMethodInfo = typeof(ObjectResult).GetMethod(nameof(EnsureCapacity), BindingFlags.NonPublic|BindingFlags.Instance);
+
+        public static void EnsureCapacity(this ObjectResult context, int capacity)
+        {
+            EnsureCapacityMethodInfo.Invoke(context, new object[] { capacity });
+        }
+
+        private static MethodInfo SetValueUnsafeMethodInfo = typeof(ObjectResult).GetMethod(nameof(SetValueUnsafe), BindingFlags.NonPublic|BindingFlags.Instance, types: new[] { typeof(int), typeof(string), typeof(object), typeof(bool) });
+
+        public static void SetValueUnsafe(this ObjectResult context, int index, string name, object? value, bool isNullable = true)
+        {
+            SetValueUnsafeMethodInfo.Invoke(context, new object[] { index, name, value, isNullable });
         }
     }
 }

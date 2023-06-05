@@ -1,26 +1,27 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net7.0</TargetFramework>
     <AssetTargetFallback>$(AssetTargetFallback);portable-net45+win8+wp8+wpa81;</AssetTargetFallback>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
-    <Version>1.0.6</Version>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Version>3.0.43</Version>
+    <PackageOutputPath>\\kuforedev\shared\dev_packages</PackageOutputPath>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb;.xml</AllowedOutputExtensionsInPackageBuildOutputFolder>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Elastic.Apm.AspNetCore" Version="1.14.1" />
-    <PackageReference Include="HotChocolate.Diagnostics" Version="12.7.0" />
-    <ProjectReference Include="..\Geex.Common.Abstraction\Geex.Common.Abstraction.csproj" />
+    <PackageReference Include="Elastic.Apm.AspNetCore" Version="1.18.0" />
+    <PackageReference Include="HotChocolate.Diagnostics" Version="13.1.0" />
     <PackageReference Include="Elasticsearch.Net" Version="7.8.2" />
     <PackageReference Include="Geexbox.Logging.RollingFile" Version="3.1.0.8" />
-    <PackageReference Include="System.ServiceModel.Primitives" Version="4.7.0" />
+    <PackageReference Include="System.ServiceModel.Primitives" Version="4.10.0" />
   </ItemGroup>
 
-  <Target Name="CopyPackage" AfterTargets="Pack">
-    <Exec Command="nuget add $(ProjectDir)bin\$(Configuration)\$(PackageId).$(PackageVersion).nupkg -source $(SolutionDir)..\nuget" />
-  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\Geex.Common.Abstraction\Geex.Common.Abstraction.csproj" />
+  </ItemGroup>
 
 </Project>

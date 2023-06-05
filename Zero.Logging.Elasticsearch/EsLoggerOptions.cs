@@ -166,5 +166,13 @@ namespace GeexBox.ElasticSearch.Zero.Logging.Elasticsearch
         /// A callback which can be used to handle logmessage which are not submitted to Elasticsearch like when it is unable to accept the events.
         /// </summary>
         public Action<LogMessage> FailureCallback { get; set; }
+        /// <summary>
+        /// username when use basic auth
+        /// </summary>
+        public string Username { get; set; }
+        /// <summary>
+        /// password when use basic auth
+        /// </summary>
+        public string Password { get; set; }
     }
 }

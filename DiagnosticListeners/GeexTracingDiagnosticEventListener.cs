@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-
+using System.Reflection;
 using Elastic.Apm;
 using Elastic.Apm.Api;
 
@@ -215,10 +215,10 @@ namespace Geex.Common.Gql
         private const long _ticksToNanosecondsMultiplicator = 100;
         private readonly ConcurrentQueue<GeexTracingResolverRecord> _resolverRecords = new ConcurrentQueue<GeexTracingResolverRecord>();
         private TimeSpan _duration;
-        private ResultMap? _parsingResult;
+        private ObjectResult? _parsingResult;
         private DateTimeOffset _startTime;
         private long _startTimestamp;
-        private ResultMap? _validationResult;
+        private ObjectResult? _validationResult;
         private ISpan? _request_span;
 
         public GeexTracingResultBuilder(ILogger<GeexTracingDiagnosticEventListener> logger)
@@ -235,18 +235,18 @@ namespace Geex.Common.Gql
 
         public void SetParsingResult(long startTimestamp, long endTimestamp)
         {
-            this._parsingResult = new ResultMap();
+            this._parsingResult = new ObjectResult();
             this._parsingResult.EnsureCapacity(2);
-            this._parsingResult.SetValue(0, "startOffset", startTimestamp - this._startTimestamp);
-            this._parsingResult.SetValue(1, "duration", endTimestamp - startTimestamp);
+            this._parsingResult.SetValueUnsafe(0, "startOffset", startTimestamp - this._startTimestamp);
+            this._parsingResult.SetValueUnsafe(1, "duration", endTimestamp - startTimestamp);
         }
 
         public void SetValidationResult(long startTimestamp, long endTimestamp)
         {
-            this._validationResult = new ResultMap();
+            this._validationResult = new ObjectResult();
             this._validationResult.EnsureCapacity(2);
-            this._validationResult.SetValue(0, "startOffset", startTimestamp - this._startTimestamp);
-            this._validationResult.SetValue(1, "duration", endTimestamp - startTimestamp);
+            this._validationResult.SetValueUnsafe(0, "startOffset", startTimestamp - this._startTimestamp);
+            this._validationResult.SetValueUnsafe(1, "duration", endTimestamp - startTimestamp);
         }
 
         public void AddResolverResult(GeexTracingResolverRecord record) => this._resolverRecords.Enqueue(record);
@@ -254,51 +254,51 @@ namespace Geex.Common.Gql
         public void SetOperationEndTime(IRequestContext context, TimeSpan duration)
         {
             this._duration = duration;
-            if (context.Result is IReadOnlyQueryResult result)
+            if (context.Result is IQueryResult result)
             {
                 var resultMap = this.Build();
                 this.logger.LogTraceWithData(GeexboxEventId.ApolloTracing, null, resultMap);
                 // 此处需要跳过introspection查询结果
-                this.logger.LogDebugWithData(new EventId((nameof(GeexTracingOperationScope) + "End").GetHashCode(), nameof(GeexTracingOperationScope) + "End"), "Request ended.", new { QueryId = context.Request.QueryId, Data = (object)(context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!, Error = context.Result.Errors });
+                this.logger.LogDebugWithData(new EventId((nameof(GeexTracingOperationScope) + "End").GetHashCode(), nameof(GeexTracingOperationScope) + "End"), "Request ended.", new { QueryId = context.Request.QueryId, Data = (object)(context.Request.OperationName?.Contains("introspection") == true ? "[Schema Doc]" : result.Data)!, Error = result.Errors });
                 context.Result = QueryResultBuilder.FromResult(result).AddExtension("tracing", resultMap).Create();
             }
         }
 
-        public IResultMap Build()
+        public ObjectResult Build()
         {
             if (this._parsingResult == null)
                 this.SetParsingResult(this._startTimestamp, this._startTimestamp);
             if (this._validationResult == null)
                 this.SetValidationResult(this._startTimestamp, this._startTimestamp);
-            ResultMap resultMap1 = new ResultMap();
+            var resultMap1 = new ObjectResult();
             resultMap1.EnsureCapacity(1);
-            resultMap1.SetValue(0, "resolvers", this.BuildResolverResults());
-            ResultMap resultMap2 = new ResultMap();
+            resultMap1.SetValueUnsafe(0, "resolvers", this.BuildResolverResults());
+            ObjectResult resultMap2 = new ObjectResult();
             resultMap2.EnsureCapacity(7);
-            resultMap2.SetValue(0, "version", 1);
-            resultMap2.SetValue(1, "startTime", this._startTime.ToUnixTimeSeconds());
-            resultMap2.SetValue(2, "endTime", this._startTime.Add(this._duration).ToUnixTimeSeconds());
-            resultMap2.SetValue(3, "duration", this._duration.TotalSeconds);
-            resultMap2.SetValue(4, "parsing", (object)this._parsingResult);
-            resultMap2.SetValue(5, "validation", (object)this._validationResult);
-            resultMap2.SetValue(6, "execution", resultMap1);
+            resultMap2.SetValueUnsafe(0, "version", 1);
+            resultMap2.SetValueUnsafe(1, "startTime", this._startTime.ToUnixTimeSeconds());
+            resultMap2.SetValueUnsafe(2, "endTime", this._startTime.Add(this._duration).ToUnixTimeSeconds());
+            resultMap2.SetValueUnsafe(3, "duration", this._duration.TotalSeconds);
+            resultMap2.SetValueUnsafe(4, "parsing", (object)this._parsingResult);
+            resultMap2.SetValueUnsafe(5, "validation", (object)this._validationResult);
+            resultMap2.SetValueUnsafe(6, "execution", resultMap1);
             return resultMap2;
         }
 
-        private ResultMap[] BuildResolverResults()
+        private ObjectResult[] BuildResolverResults()
         {
             int num = 0;
-            ResultMap[] resultMapArray = new ResultMap[this._resolverRecords.Count];
+            ObjectResult[] resultMapArray = new ObjectResult[this._resolverRecords.Count];
             foreach (GeexTracingResolverRecord resolverRecord in this._resolverRecords)
             {
-                ResultMap resultMap = new ResultMap();
+                ObjectResult resultMap = new ObjectResult();
                 resultMap.EnsureCapacity(6);
-                resultMap.SetValue(0, "path", resolverRecord.Path);
-                resultMap.SetValue(1, "parentType", resolverRecord.ParentType);
-                resultMap.SetValue(2, "fieldName", resolverRecord.FieldName);
-                resultMap.SetValue(3, "returnType", resolverRecord.ReturnType);
-                resultMap.SetValue(4, "startOffset", resolverRecord.StartTimestamp - this._startTimestamp);
-                resultMap.SetValue(5, "duration", resolverRecord.EndTimestamp - resolverRecord.StartTimestamp);
+                resultMap.SetValueUnsafe(0, "path", resolverRecord.Path);
+                resultMap.SetValueUnsafe(1, "parentType", resolverRecord.ParentType);
+                resultMap.SetValueUnsafe(2, "fieldName", resolverRecord.FieldName);
+                resultMap.SetValueUnsafe(3, "returnType", resolverRecord.ReturnType);
+                resultMap.SetValueUnsafe(4, "startOffset", resolverRecord.StartTimestamp - this._startTimestamp);
+                resultMap.SetValueUnsafe(5, "duration", resolverRecord.EndTimestamp - resolverRecord.StartTimestamp);
                 resultMapArray[num++] = resultMap;
             }
             return resultMapArray;
@@ -314,8 +314,8 @@ namespace Geex.Common.Gql
         {
             this.Path = context.Path.ToList();
             this.ParentType = context.ObjectType.Name;
-            this.FieldName = context.Field.Name;
-            this.ReturnType = context.Field.Type.TypeName();
+            this.FieldName = context.Selection.Field.Name;
+            this.ReturnType = context.Selection.Field.Type.TypeName();
             this.StartTimestamp = startTimestamp;
             this.EndTimestamp = endTimestamp;
         }
